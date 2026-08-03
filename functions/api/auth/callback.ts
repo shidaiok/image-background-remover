@@ -41,7 +41,7 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
     return json({ error: 'OAuth state validation failed.' }, { status: 400 })
   }
 
-  const redirectUri = env.OAUTH_REDIRECT_URI || `${getOrigin(request)}/api/auth/callback`
+  const redirectUri = env.OAUTH_REDIRECT_URI || `${getOrigin(request)}/api/auth/google/callback`
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {

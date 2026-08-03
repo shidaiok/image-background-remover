@@ -8,7 +8,7 @@ export function onRequestGet(context: { request: Request; env: AuthEnv }) {
   }
 
   const state = randomToken(16)
-  const redirectUri = context.env.OAUTH_REDIRECT_URI || `${getOrigin(context.request)}/api/auth/callback`
+  const redirectUri = context.env.OAUTH_REDIRECT_URI || `${getOrigin(context.request)}/api/auth/google/callback`
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', redirectUri)
