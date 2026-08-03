@@ -6,4 +6,4 @@ pages_build_output_dir = "out"
 [[d1_databases]]
 binding = "DB"
 database_name = "image-background-remover-auth"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "d78fafe7-e149-4e4a-a9d4-be89abf026a5"
