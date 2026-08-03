@@ -117,7 +117,7 @@ export default function Home() {
               </>
             ) : (
               <a className='rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500' href='/api/auth/login'>
-                GitHub 登录
+                Google 登录
               </a>
             )}
           </div>

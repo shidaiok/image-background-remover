@@ -9,11 +9,14 @@ export function onRequestGet(context: { request: Request; env: AuthEnv }) {
 
   const state = randomToken(16)
   const redirectUri = context.env.OAUTH_REDIRECT_URI || `${getOrigin(context.request)}/api/auth/callback`
-  const url = new URL('https://github.com/login/oauth/authorize')
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('scope', 'read:user user:email')
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', 'openid email profile')
   url.searchParams.set('state', state)
+  url.searchParams.set('access_type', 'offline')
+  url.searchParams.set('prompt', 'consent')
 
   return new Response(null, {
     status: 302,

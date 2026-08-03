@@ -13,32 +13,11 @@ import {
   sha256,
 } from '../../_shared/auth'
 
-interface GitHubUser {
-  id: number
-  login: string
-  name?: string
-  avatar_url?: string
-  email?: string
-}
-
-interface GitHubEmail {
+interface GoogleUser {
+  sub: string
   email: string
-  primary: boolean
-  verified: boolean
-}
-
-async function fetchGitHubEmail(accessToken: string) {
-  const response = await fetch('https://api.github.com/user/emails', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'image-background-remover',
-    },
-  })
-
-  if (!response.ok) return ''
-  const emails = (await response.json()) as GitHubEmail[]
-  return emails.find((item) => item.primary && item.verified)?.email || ''
+  name?: string
+  picture?: string
 }
 
 export async function onRequestGet(context: { request: Request; env: AuthEnv }) {
@@ -63,7 +42,7 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
   }
 
   const redirectUri = env.OAUTH_REDIRECT_URI || `${getOrigin(request)}/api/auth/callback`
-  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -74,6 +53,7 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
       client_secret: env.OAUTH_CLIENT_SECRET,
       code,
       redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
     }),
   })
 
@@ -82,11 +62,10 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
     return json({ error: tokenPayload.error_description || 'OAuth token exchange failed.' }, { status: 400 })
   }
 
-  const userResponse = await fetch('https://api.github.com/user', {
+  const userResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: {
       Authorization: `Bearer ${tokenPayload.access_token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'image-background-remover',
+      Accept: 'application/json',
     },
   })
 
@@ -94,8 +73,7 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
     return json({ error: 'Failed to fetch OAuth user profile.' }, { status: 400 })
   }
 
-  const profile = (await userResponse.json()) as GitHubUser
-  const email = profile.email || (await fetchGitHubEmail(tokenPayload.access_token))
+  const profile = (await userResponse.json()) as GoogleUser
 
   await ensureAuthSchema(db)
   await db
@@ -105,12 +83,12 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
        ON CONFLICT(provider, provider_user_id)
        DO UPDATE SET email = excluded.email, name = excluded.name, avatar_url = excluded.avatar_url, updated_at = CURRENT_TIMESTAMP`
     )
-    .bind('github', String(profile.id), email, profile.name || profile.login, profile.avatar_url || '')
+    .bind('google', profile.sub, profile.email || '', profile.name || profile.email || '', profile.picture || '')
     .run()
 
   const user = await db
     .prepare('SELECT id FROM users WHERE provider = ? AND provider_user_id = ?')
-    .bind('github', String(profile.id))
+    .bind('google', profile.sub)
     .first<{ id: number }>()
 
   if (!user) {
