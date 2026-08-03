@@ -1,0 +1,9 @@
+name = "image-background-remover"
+compatibility_date = "2026-07-24"
+pages_build_output_dir = "out"
+
+# Fill database_id after creating the Cloudflare D1 database.
+[[d1_databases]]
+binding = "DB"
+database_name = "image-background-remover-auth"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"

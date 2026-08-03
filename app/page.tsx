@@ -1,10 +1,17 @@
 ﻿'use client'
 
 import Image from 'next/image'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const MAX_SIZE = 12 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+interface CurrentUser {
+  id: number
+  email?: string
+  name?: string
+  avatar_url?: string
+}
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -22,6 +29,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
   const [dragActive, setDragActive] = useState(false)
+  const [user, setUser] = useState<CurrentUser | null>(null)
 
   const canProcess = !!file && !loading
 
@@ -29,6 +37,18 @@ export default function Home() {
     if (!file) return '未选择文件'
     return `${file.name} · ${formatBytes(file.size)}`
   }, [file])
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((response) => response.json())
+      .then((payload) => setUser(payload.user || null))
+      .catch(() => setUser(null))
+  }, [])
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    setUser(null)
+  }
 
   async function onFileSelect(nextFile: File | null) {
     setError('')
@@ -82,9 +102,25 @@ export default function Home() {
   return (
     <main className='min-h-screen bg-slate-950 text-slate-100'>
       <div className='mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8'>
-        <header className='flex flex-col gap-2 border-b border-slate-800 pb-4'>
-          <h1 className='text-2xl font-semibold tracking-tight'>Image Background Remover</h1>
-          <p className='max-w-2xl text-sm text-slate-400'>上传一张图片，自动去背景，马上预览并下载透明 PNG。</p>
+        <header className='flex flex-col gap-4 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between'>
+          <div>
+            <h1 className='text-2xl font-semibold tracking-tight'>Image Background Remover</h1>
+            <p className='mt-2 max-w-2xl text-sm text-slate-400'>上传一张图片，自动去背景，马上预览并下载透明 PNG。</p>
+          </div>
+          <div className='flex items-center gap-3'>
+            {user ? (
+              <>
+                <span className='max-w-[220px] truncate text-sm text-slate-300'>{user.name || user.email || '已登录'}</span>
+                <button className='rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500' onClick={handleLogout}>
+                  退出
+                </button>
+              </>
+            ) : (
+              <a className='rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500' href='/api/auth/login'>
+                GitHub 登录
+              </a>
+            )}
+          </div>
         </header>
 
         <section className='grid gap-6 lg:grid-cols-[1.1fr_0.9fr]'>
