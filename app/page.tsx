@@ -30,6 +30,7 @@ export default function Home() {
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
   const [dragActive, setDragActive] = useState(false)
   const [user, setUser] = useState<CurrentUser | null>(null)
+  const [credits, setCredits] = useState(0)
 
   const canProcess = !!file && !loading
 
@@ -43,11 +44,17 @@ export default function Home() {
       .then((response) => response.json())
       .then((payload) => setUser(payload.user || null))
       .catch(() => setUser(null))
+
+    fetch('/api/credits')
+      .then((response) => response.json())
+      .then((payload) => setCredits(payload.balance || 0))
+      .catch(() => setCredits(0))
   }, [])
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     setUser(null)
+    setCredits(0)
   }
 
   async function onFileSelect(nextFile: File | null) {
@@ -113,7 +120,7 @@ export default function Home() {
             </a>
             {user ? (
               <>
-                <span className='max-w-[220px] truncate text-sm text-slate-300'>{user.name || user.email || '已登录'}</span>
+                <span className='max-w-[220px] truncate text-sm text-slate-300'>{user.name || user.email || '已登录'} · {credits} 次额度</span>
                 <button className='rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500' onClick={handleLogout}>
                   退出
                 </button>

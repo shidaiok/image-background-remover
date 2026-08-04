@@ -5,7 +5,7 @@ export interface D1Database {
 export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement
   first<T = unknown>(): Promise<T | null>
-  run(): Promise<unknown>
+  run(): Promise<{ meta?: { changes?: number } }>
 }
 
 export interface AuthEnv {
@@ -14,6 +14,13 @@ export interface AuthEnv {
   OAUTH_CLIENT_SECRET?: string
   OAUTH_REDIRECT_URI?: string
   SESSION_COOKIE_NAME?: string
+}
+
+export interface CurrentUser {
+  id: number
+  email: string
+  name: string
+  avatar_url: string
 }
 
 const SESSION_DAYS = 30
@@ -95,6 +102,26 @@ export async function ensureAuthSchema(db: D1Database) {
       )`
     )
     .run()
+}
+
+export async function getCurrentUser(request: Request, env: AuthEnv) {
+  const db = env.DB
+  if (!db) return null
+
+  const token = getCookie(request, sessionCookieName(env))
+  if (!token) return null
+
+  await ensureAuthSchema(db)
+  const sessionHash = await sha256(token)
+  return db
+    .prepare(
+      `SELECT users.id, users.email, users.name, users.avatar_url
+       FROM sessions
+       JOIN users ON users.id = sessions.user_id
+       WHERE sessions.session_hash = ? AND sessions.expires_at > ?`
+    )
+    .bind(sessionHash, new Date().toISOString())
+    .first<CurrentUser>()
 }
 
 export function sessionExpiresAt() {

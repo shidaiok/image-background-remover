@@ -12,6 +12,7 @@ import {
   sessionMaxAge,
   sha256,
 } from '../../_shared/auth'
+import { grantFreeTrial } from '../../_shared/billing'
 
 interface GoogleUser {
   sub: string
@@ -94,6 +95,8 @@ export async function onRequestGet(context: { request: Request; env: AuthEnv }) 
   if (!user) {
     return json({ error: 'Failed to create login session.' }, { status: 500 })
   }
+
+  await grantFreeTrial(db, user.id)
 
   const sessionToken = randomToken()
   const sessionHash = await sha256(sessionToken)
