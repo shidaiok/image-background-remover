@@ -6,6 +6,7 @@ pages_build_output_dir = "out"
 OAUTH_CLIENT_ID = "756474936491-bvq00uru5kv4kdul1ise1nkuns0tg9kt.apps.googleusercontent.com"
 OAUTH_REDIRECT_URI = "https://shidaigpt.shop/api/auth/google/callback"
 SESSION_COOKIE_NAME = "ibr_session"
+PAYPAL_CLIENT_ID = "AYVI7mbMsvjyOIc_eLhHunUwVW6IYRgfTGHaDTUltyJFBEIuPwBeWNtPLHGcUFnVQts1LnVjQ7KwfrAG"
 PAYPAL_ENV = "sandbox"
 PAYPAL_CURRENCY = "USD"
 
