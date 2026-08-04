@@ -108,6 +108,9 @@ export default function Home() {
             <p className='mt-2 max-w-2xl text-sm text-slate-400'>上传一张图片，自动去背景，马上预览并下载透明 PNG。</p>
           </div>
           <div className='flex items-center gap-3'>
+            <a className='rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500' href='/pricing'>
+              定价
+            </a>
             {user ? (
               <>
                 <span className='max-w-[220px] truncate text-sm text-slate-300'>{user.name || user.email || '已登录'}</span>
