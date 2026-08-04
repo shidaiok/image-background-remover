@@ -6,6 +6,7 @@ export interface BillingEnv {
   PAYPAL_CLIENT_SECRET?: string
   PAYPAL_ENV?: string
   PAYPAL_CURRENCY?: string
+  PAYPAL_WEBHOOK_ID?: string
 }
 
 export const plans = {
@@ -113,4 +114,53 @@ export async function getPayPalAccessToken(env: BillingEnv) {
   }
 
   return payload.access_token
+}
+
+export async function fulfillPayPalOrder(
+  db: D1Database,
+  orderId: string,
+  amount: { currency_code?: string; value?: string },
+  currency: string
+) {
+  await ensureBillingSchema(db)
+  const localOrder = await db
+    .prepare('SELECT user_id, plan_id, amount, currency FROM paypal_orders WHERE paypal_order_id = ?')
+    .bind(orderId)
+    .first<{ user_id: number; plan_id: string; amount: string; currency: string }>()
+
+  if (!localOrder) return { ok: false, error: '订单不存在。' }
+  if (localOrder.currency !== currency || amount.currency_code !== currency || amount.value !== localOrder.amount) {
+    return { ok: false, error: 'PayPal 订单金额校验失败。' }
+  }
+
+  const plan = getPlan(localOrder.plan_id)
+  if (!plan) return { ok: false, error: '套餐配置不存在。' }
+
+  await db.prepare('UPDATE paypal_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE paypal_order_id = ?').bind('completed', orderId).run()
+  await db
+    .prepare('INSERT OR IGNORE INTO credit_ledger (user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?)')
+    .bind(localOrder.user_id, plan.credits, 'paypal_purchase', orderId)
+    .run()
+
+  return { ok: true, credits: plan.credits }
+}
+
+export async function reversePayPalOrder(db: D1Database, orderId: string, reason: 'paypal_refund' | 'paypal_reversal') {
+  await ensureBillingSchema(db)
+  const localOrder = await db
+    .prepare('SELECT user_id, plan_id FROM paypal_orders WHERE paypal_order_id = ?')
+    .bind(orderId)
+    .first<{ user_id: number; plan_id: string }>()
+
+  if (!localOrder) return { ok: false }
+  const plan = getPlan(localOrder.plan_id)
+  if (!plan) return { ok: false }
+
+  await db.prepare('UPDATE paypal_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE paypal_order_id = ?').bind(reason, orderId).run()
+  await db
+    .prepare('INSERT OR IGNORE INTO credit_ledger (user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?)')
+    .bind(localOrder.user_id, -plan.credits, reason, orderId)
+    .run()
+
+  return { ok: true }
 }

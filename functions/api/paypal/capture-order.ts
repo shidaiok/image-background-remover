@@ -1,5 +1,5 @@
 import { getCurrentUser, json } from '../../_shared/auth'
-import { BillingEnv, ensureBillingSchema, getPayPalAccessToken, getPlan, paypalBaseUrl } from '../../_shared/billing'
+import { BillingEnv, ensureBillingSchema, fulfillPayPalOrder, getPayPalAccessToken, getPlan, paypalBaseUrl } from '../../_shared/billing'
 
 export async function onRequestPost(context: { request: Request; env: BillingEnv }) {
   const db = context.env.DB
@@ -43,15 +43,8 @@ export async function onRequestPost(context: { request: Request; env: BillingEnv
 
   const paidAmount = payload.purchase_units?.[0]?.amount
   const expectedCurrency = context.env.PAYPAL_CURRENCY || 'USD'
-  if (paidAmount?.currency_code !== expectedCurrency || paidAmount.value !== plan.price) {
-    return json({ error: 'PayPal 订单金额校验失败。' }, { status: 400 })
-  }
+  const result = await fulfillPayPalOrder(db, body.orderId, paidAmount || {}, expectedCurrency)
+  if (!result.ok) return json({ error: result.error }, { status: 400 })
 
-  await db.prepare('UPDATE paypal_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE paypal_order_id = ?').bind('completed', body.orderId).run()
-  await db
-    .prepare('INSERT OR IGNORE INTO credit_ledger (user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?)')
-    .bind(user.id, plan.credits, 'paypal_purchase', body.orderId)
-    .run()
-
-  return json({ ok: true, credits: plan.credits })
+  return json({ ok: true, credits: result.credits || plan.credits })
 }
