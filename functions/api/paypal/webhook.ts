@@ -1,12 +1,49 @@
 import { json } from '../../_shared/auth'
-import { BillingEnv, fulfillPayPalOrder, getPayPalAccessToken, paypalBaseUrl, reversePayPalOrder } from '../../_shared/billing'
+import {
+  BillingEnv,
+  findPlanByPayPalPlanId,
+  fulfillPayPalOrder,
+  grantSubscriptionCreditsFromDetails,
+  getPayPalAccessToken,
+  getPlan,
+  paypalBaseUrl,
+  reversePayPalOrder,
+  showPayPalSubscription,
+  upsertPayPalSubscription,
+} from '../../_shared/billing'
 
 interface PayPalWebhookEvent {
   event_type?: string
   resource?: {
+    id?: string
+    status?: string
+    plan_id?: string
+    billing_agreement_id?: string
     amount?: { currency_code?: string; value?: string }
     supplementary_data?: { related_ids?: { order_id?: string } }
   }
+}
+
+async function syncSubscriptionStatus(db: NonNullable<BillingEnv['DB']>, env: BillingEnv, subscriptionId: string) {
+  const details = await showPayPalSubscription(env, subscriptionId)
+  if (!details.id) return
+
+  const localSubscription = await db
+    .prepare('SELECT user_id, plan_id, paypal_plan_id FROM paypal_subscriptions WHERE paypal_subscription_id = ?')
+    .bind(details.id)
+    .first<{ user_id: number; plan_id: string; paypal_plan_id: string }>()
+  const plan = getPlan(localSubscription?.plan_id || null) || (await findPlanByPayPalPlanId(db, details.plan_id))
+  if (!plan) return
+
+  await upsertPayPalSubscription(db, {
+    userId: localSubscription?.user_id || null,
+    subscriptionId: details.id,
+    planId: plan.id,
+    paypalPlanId: localSubscription?.paypal_plan_id || details.plan_id || '',
+    status: details.status || 'UNKNOWN',
+    periodStart: details.billing_info?.last_payment?.time || null,
+    periodEnd: details.billing_info?.next_billing_time || null,
+  })
 }
 
 export async function onRequestPost(context: { request: Request; env: BillingEnv }) {
@@ -63,6 +100,33 @@ export async function onRequestPost(context: { request: Request; env: BillingEnv
 
   if (event.event_type === 'PAYMENT.CAPTURE.REVERSED' && orderId) {
     await reversePayPalOrder(db, orderId, 'paypal_reversal')
+  }
+
+  const subscriptionId = event.resource?.billing_agreement_id || event.resource?.id
+
+  if (event.event_type === 'PAYMENT.SALE.COMPLETED' && subscriptionId) {
+    const details = await showPayPalSubscription(env, subscriptionId)
+    const result = await grantSubscriptionCreditsFromDetails(db, details)
+    if (!result.ok && result.error) return json({ error: result.error }, { status: 400 })
+  }
+
+  if (
+    subscriptionId &&
+    [
+      'BILLING.SUBSCRIPTION.ACTIVATED',
+      'BILLING.SUBSCRIPTION.UPDATED',
+      'BILLING.SUBSCRIPTION.CANCELLED',
+      'BILLING.SUBSCRIPTION.EXPIRED',
+      'BILLING.SUBSCRIPTION.SUSPENDED',
+      'BILLING.SUBSCRIPTION.PAYMENT.FAILED',
+    ].includes(event.event_type || '')
+  ) {
+    await syncSubscriptionStatus(db, env, subscriptionId)
+    if (event.event_type === 'BILLING.SUBSCRIPTION.ACTIVATED') {
+      const details = await showPayPalSubscription(env, subscriptionId)
+      const result = await grantSubscriptionCreditsFromDetails(db, details)
+      if (!result.ok && result.error) return json({ error: result.error }, { status: 400 })
+    }
   }
 
   return json({ ok: true })

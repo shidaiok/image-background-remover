@@ -1,5 +1,13 @@
-import { getOrigin, getCurrentUser, json } from '../../_shared/auth'
-import { BillingEnv, ensureBillingSchema, getPayPalAccessToken, getPlan, paypalBaseUrl } from '../../_shared/billing'
+import { getCurrentUser, getOrigin, json } from '../../_shared/auth'
+import {
+  BillingEnv,
+  ensureBillingSchema,
+  ensurePayPalPlan,
+  getPayPalAccessToken,
+  getPlan,
+  paypalBaseUrl,
+  upsertPayPalSubscription,
+} from '../../_shared/billing'
 
 export async function onRequestPost(context: { request: Request; env: BillingEnv }) {
   const db = context.env.DB
@@ -14,43 +22,47 @@ export async function onRequestPost(context: { request: Request; env: BillingEnv
 
   await ensureBillingSchema(db)
   const currency = context.env.PAYPAL_CURRENCY || 'USD'
+  const paypalPlanId = await ensurePayPalPlan(context.env, db, plan, currency)
   const accessToken = await getPayPalAccessToken(context.env)
   const origin = getOrigin(context.request)
 
-  const response = await fetch(`${paypalBaseUrl(context.env)}/v2/checkout/orders`, {
+  const response = await fetch(`${paypalBaseUrl(context.env)}/v1/billing/subscriptions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      intent: 'CAPTURE',
-      purchase_units: [
-        {
-          reference_id: plan.id,
-          description: `${plan.name} monthly credits`,
-          amount: { currency_code: currency, value: plan.price },
-        },
-      ],
+      plan_id: paypalPlanId,
+      custom_id: `${user.id}:${plan.id}`,
       application_context: {
         brand_name: 'Image Background Remover',
-        user_action: 'PAY_NOW',
+        locale: 'zh-CN',
+        user_action: 'SUBSCRIBE_NOW',
         return_url: `${origin}/payment/success`,
         cancel_url: `${origin}/payment/cancel`,
       },
     }),
   })
 
-  const order = (await response.json()) as { id?: string; links?: Array<{ href: string; rel: string }>; message?: string }
-  if (!response.ok || !order.id) {
-    return json({ error: order.message || '创建 PayPal 订单失败。' }, { status: 400 })
+  const subscription = (await response.json()) as {
+    id?: string
+    status?: string
+    links?: Array<{ href: string; rel: string }>
+    message?: string
+  }
+  if (!response.ok || !subscription.id) {
+    return json({ error: subscription.message || '创建 PayPal 订阅失败。' }, { status: 400 })
   }
 
-  await db
-    .prepare('INSERT INTO paypal_orders (user_id, paypal_order_id, plan_id, amount, currency, status) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(user.id, order.id, plan.id, plan.price, currency, 'created')
-    .run()
+  await upsertPayPalSubscription(db, {
+    userId: user.id,
+    subscriptionId: subscription.id,
+    planId: plan.id,
+    paypalPlanId,
+    status: subscription.status || 'APPROVAL_PENDING',
+  })
 
-  const approveUrl = order.links?.find((link) => link.rel === 'approve')?.href
-  return json({ orderId: order.id, approveUrl })
+  const approveUrl = subscription.links?.find((link) => link.rel === 'approve')?.href
+  return json({ subscriptionId: subscription.id, approveUrl })
 }

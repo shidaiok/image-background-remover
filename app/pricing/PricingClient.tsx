@@ -22,10 +22,10 @@ const plans = [
     unit: '/ 月',
     credits: '每月 15 张高清去背景',
     description: '适合偶尔处理头像、证件照和日常素材。',
-    cta: '购买 Starter',
+    cta: '订阅 Starter',
     planId: 'starter' as PlanId,
     featured: false,
-    features: ['约 $0.33 / 张', '浅色/深色预览', '高清 PNG 导出', '适合个人轻度使用'],
+    features: ['约 $0.33 / 张', '每月自动发放 15 次额度', '高清 PNG 导出', '适合个人轻度使用'],
   },
   {
     name: 'Creator',
@@ -33,10 +33,10 @@ const plans = [
     unit: '/ 月',
     credits: '每月 50 张高清去背景',
     description: '适合内容创作者、轻量电商和稳定素材处理。',
-    cta: '购买 Creator',
+    cta: '订阅 Creator',
     planId: 'creator' as PlanId,
     featured: true,
-    features: ['约 $0.26 / 张', '更高月度额度', '适合商品图和社媒素材', '优先推荐升级方案'],
+    features: ['约 $0.26 / 张', '每月自动发放 50 次额度', '适合商品图和社媒素材', '优先推荐升级方案'],
   },
 ]
 
@@ -59,11 +59,11 @@ export default function PricingClient() {
         return
       }
       if (!response.ok || !payload?.approveUrl) {
-        throw new Error(payload?.error || '创建支付订单失败。')
+        throw new Error(payload?.error || '创建订阅失败。')
       }
       window.location.href = payload.approveUrl
     } catch (err) {
-      setError(err instanceof Error ? err.message : '支付请求失败，请稍后重试。')
+      setError(err instanceof Error ? err.message : '订阅请求失败，请稍后重试。')
       setLoadingPlan(null)
     }
   }
@@ -111,7 +111,7 @@ export default function PricingClient() {
                 disabled={loadingPlan !== null}
                 onClick={() => buyPlan(plan.planId)}
               >
-                {loadingPlan === plan.planId ? '跳转支付中...' : plan.cta}
+                {loadingPlan === plan.planId ? '跳转订阅中...' : plan.cta}
               </button>
             ) : (
               <a className='mt-6 inline-flex h-11 items-center justify-center rounded-md border border-slate-700 px-4 text-sm font-medium text-slate-100 hover:border-slate-500' href='/api/auth/login'>

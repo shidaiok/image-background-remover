@@ -4,33 +4,39 @@ import { useEffect, useState } from 'react'
 
 export default function PaymentSuccessClient() {
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
-  const [message, setMessage] = useState('正在确认 PayPal 支付...')
+  const [message, setMessage] = useState('正在确认 PayPal 订阅...')
 
   useEffect(() => {
-    const orderId = new URLSearchParams(window.location.search).get('token')
-    if (!orderId) {
-      setState('error')
-      setMessage('未找到 PayPal 订单号，请返回定价页重新发起支付。')
+    const params = new URLSearchParams(window.location.search)
+    const subscriptionId = params.get('subscription_id') || params.get('subscriptionId')
+
+    if (!subscriptionId) {
+      setState('success')
+      setMessage('订阅已提交。PayPal 确认首期付款后，本月额度会自动到账。')
       return
     }
 
-    fetch('/api/paypal/capture-order', {
+    fetch('/api/paypal/sync-subscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId }),
+      body: JSON.stringify({ subscriptionId }),
     })
       .then(async (response) => {
         const payload = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(payload?.error || '支付确认失败。')
+        if (!response.ok) throw new Error(payload?.error || '订阅确认失败。')
         return payload
       })
       .then((payload) => {
         setState('success')
-        setMessage(payload.alreadyCaptured ? '订单已确认，额度已在账户中。' : `支付成功，${payload.credits} 次额度已到账。`)
+        if (payload.credits > 0) {
+          setMessage(`订阅成功，${payload.credits} 次本月额度已到账。`)
+        } else {
+          setMessage('订阅已确认。本月额度如已到账，不会重复发放。')
+        }
       })
       .catch((error) => {
         setState('error')
-        setMessage(error instanceof Error ? error.message : '支付确认失败，请稍后重试。')
+        setMessage(error instanceof Error ? error.message : '订阅确认失败，请稍后重试。')
       })
   }, [])
 
